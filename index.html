@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Neural FNF Rhythm Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      font-family: sans-serif;
+      text-align: center;
+      color: white;
+    }
+    #score {
+      font-size: 24px;
+      margin: 10px 0;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: #222;
+      border: 2px solid white;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">Score: 0</div>
+  <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+  <!-- Magenta.js libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.27.1/es6/core.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.27.1/es6/music_rnn.js"></script>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+
+    const lanes = ['a','s','k','l'];
+    const laneWidth = canvas.width / lanes.length;
+    const hitY = canvas.height - 80;
+
+    let score = 0;
+    let notes = [];
+    let startTime;
+
+    // Load Magenta RNN
+    const rnn = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
+    rnn.initialize();
+
+    // Generate neural-network notes
+    async function generateNotes() {
+      const seed = {
+        notes: [
+          { pitch: 60, startTime: 0, endTime: 0.5 },
+          { pitch: 62, startTime: 0.5, endTime: 1 }
+        ],
+        totalTime: 2
+      };
+      const rnnSeq = await rnn.continueSequence(seed, 32, 1.5);
+      notes = rnnSeq.notes.map(n => ({
+        lane: lanes[Math.floor(Math.random() * lanes.length)],
+        time: n.startTime
+      }));
+    }
+
+    // Draw notes and hit line
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw hit line
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, hitY, canvas.width, 5);
+
+      // Draw notes
+      const currentTime = performance.now()/1000 - startTime;
+      for (let note of notes) {
+        const y = hitY - (note.time - currentTime) * 200;
+        if (y < canvas.height && y > -20) {
+          ctx.fillStyle = 'blue';
+          ctx.fillRect(lanes.indexOf(note.lane) * laneWidth + 10, y, laneWidth - 20, 20);
+        }
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    const keysPressed = {};
+    document.addEventListener('keydown', e => keysPressed[e.key] = true);
+    document.addEventListener('keyup', e => keysPressed[e.key] = false);
+
+    // Check hits
+    function checkHits() {
+      const currentTime = performance.now()/1000 - startTime;
+      for (let i = notes.length-1; i >= 0; i--) {
+        const note = notes[i];
+        if (Math.abs(note.time - currentTime) < 0.15 && keysPressed[note.lane]) {
+          score += 100;
+          notes.splice(i, 1);
+          scoreEl.innerText = "Score: " + score;
+        }
+      }
+      requestAnimationFrame(checkHits);
+    }
+
+    // Start the game
+    async function startGame() {
+      await generateNotes();
+      startTime = performance.now()/1000;
+      draw();
+      checkHits();
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
