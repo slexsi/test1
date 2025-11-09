@@ -16,23 +16,25 @@ async function initModel() {
   console.log("✅ Magenta model ready");
 }
 
-// A short rhythmic seed
+// ---- Correct Quantized Seed ----
 const seed = {
   notes: [
-    { pitch: 36, startTime: 0.0, endTime: 0.25 },
-    { pitch: 38, startTime: 0.5, endTime: 0.75 },
+    { pitch: 36, quantizedStartStep: 0, quantizedEndStep: 1 },
+    { pitch: 38, quantizedStartStep: 2, quantizedEndStep: 3 },
   ],
-  totalTime: 1.0,
+  quantizationInfo: { stepsPerQuarter: 4 },
+  totalQuantizedSteps: 4,
 };
 
-// Generate continuation
+// ---- Generate Rhythm (quantized) ----
 async function generateRhythm() {
-  const steps = 32; // how long the rhythm lasts
+  const steps = 32;
   const temperature = 1.1;
   const result = await rnn.continueSequence(seed, steps, temperature);
   console.log("AI notes:", result.notes);
   return result.notes;
 }
+
 
 // Convert Magenta notes → game notes
 function spawnFromAI(aiNotes) {
