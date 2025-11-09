@@ -7,12 +7,12 @@
   <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
 </head>
 <body>
-  <h1>AI Rhythm Game (DrumsRNN)</h1>
-  <button id="startBtn">Generate AI Rhythm</button>
-  <input type="file" id="musicUpload" accept="audio/*">
-  <audio id="audioPlayer" controls></audio>
-
-  <canvas id="gameCanvas" width="400" height="500"></canvas>
+  <div class="container">
+    <h1>🎵 AI Rhythm Game (DrumsRNN)</h1>
+    <p id="statusText">Press the button to generate an AI rhythm!</p>
+    <button id="startBtn">Generate AI Rhythm</button>
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+  </div>
 
   <script src="script.js"></script>
 </body>
