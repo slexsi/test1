@@ -1,17 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>AI Rhythm Game (Magenta.js)</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8"/>
+  <title>Audio → Notes Transcription Demo</title>
+  <link rel="stylesheet" href="style.css"/>
+  <!-- magenta is optional if you want to feed transcribed notes into a Magenta model -->
   <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
 </head>
 <body>
-  <div class="container">
-    <h1>🎵 AI Rhythm Game (DrumsRNN)</h1>
-    <p id="statusText">Press the button to generate an AI rhythm!</p>
-    <button id="startBtn">Generate AI Rhythm</button>
-    <canvas id="gameCanvas" width="400" height="500"></canvas>
+  <div class="ui">
+    <h1>Transcribe Upload → Notes (approx)</h1>
+    <input id="file" type="file" accept="audio/*"/>
+    <button id="transcribeBtn" disabled>Transcribe & Play</button>
+    <p id="status">Choose a file (preferably a monophonic melody for best results).</p>
+  </div>
+
+  <div class="game">
+    <canvas id="gameCanvas" width="640" height="360"></canvas>
   </div>
 
   <script src="script.js"></script>
