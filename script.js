@@ -27,9 +27,18 @@ btn.addEventListener('click', async () => {
   if (!audioBuffer) return;
   btn.disabled = true;
   status.textContent = 'Transcribing (approx)...';
-  const seq = await transcribeBufferApprox(audioBuffer);
-  status.textContent = `Found ${seq.length} notes. Playing and spawning...`;
-  playBufferWithNotes(audioBuffer, seq);
+  let seq = await transcribeBufferApprox(audioBuffer);
+
+  // Reduce note density by merging close notes
+  const minGap = 0.15; // seconds
+  seq.sort((a,b)=>a.startTime-b.startTime);
+  const filtered = [];
+  for (let n of seq) {
+    if (filtered.length===0 || n.startTime - filtered[filtered.length-1].startTime > minGap) filtered.push(n);
+  }
+
+  status.textContent = `Found ${filtered.length} notes. Playing and spawning...`;
+  playBufferWithNotes(audioBuffer, filtered);
 });
 
 // ---------- Utilities ----------
@@ -85,7 +94,6 @@ async function transcribeBufferApprox(buffer) {
     }
   }
 
-  // Map pitch to 4 lanes
   const notesArr = [];
   for (let t of onsets) {
     const centerSample = Math.floor(t * sampleRate);
@@ -98,7 +106,7 @@ async function transcribeBufferApprox(buffer) {
       const midi = freqToMidi(f0);
       // Map to 4 lanes
       const lane = Math.floor(((Math.max(40, Math.min(88, midi)) - 40) / (88 - 40)) * lanes);
-      notesArr.push({ startTime: t, lane, y: -20, speed: 2 + Math.random()*1.5 });
+      notesArr.push({ startTime: t, lane, y: -20, speed: 3 });
     }
   }
 
@@ -134,20 +142,33 @@ function spawnVisualNote(note) {
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  for (let i=0;i<lanes;i++) {
+  // Draw lanes
+  for (let i=0;i<lanes;i++){
     ctx.fillStyle = '#111';
     ctx.fillRect(i*laneW,0,laneW-2,canvas.height);
+
     ctx.fillStyle = '#eee';
     ctx.font = '16px sans-serif';
     ctx.fillText(laneKeys[i].toUpperCase(), i*laneW + laneW/2 - 5, canvas.height - 10);
   }
 
+  // Draw hit line
+  const hitY = canvas.height - 60;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, hitY);
+  ctx.lineTo(canvas.width, hitY);
+  ctx.stroke();
+
+  // Draw notes
   notes.forEach(n=>{
     ctx.fillStyle = ['#e74c3c','#f1c40f','#2ecc71','#3498db'][n.lane];
     ctx.fillRect(n.lane*laneW + 6, n.y, laneW-12, 16);
     n.y += n.speed;
   });
 
+  // Draw score
   ctx.fillStyle = '#fff';
   ctx.font = '20px sans-serif';
   ctx.fillText('Score: ' + score, 10, 25);
@@ -169,7 +190,7 @@ window.addEventListener('keydown', e => {
 
   for (let i=0;i<notes.length;i++) {
     const n = notes[i];
-    if (n.lane === lane && n.y > canvas.height - 80 && n.y < canvas.height - 20) {
+    if (n.lane === lane && n.y > canvas.height - 80 && n.y < canvas.height - 40) {
       notes.splice(i,1);
       score += 1;
       break;
