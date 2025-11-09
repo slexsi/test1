@@ -2,48 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AI Rhythm Game (Beat-Synced)</title>
-  <style>
-    body {
-      background: #111;
-      color: #fff;
-      font-family: sans-serif;
-      text-align: center;
-      margin: 0;
-      padding: 20px;
-    }
-    canvas {
-      background: #222;
-      border-radius: 12px;
-      display: block;
-      margin: 20px auto;
-    }
-    button, input {
-      font-size: 16px;
-      padding: 10px 15px;
-      margin: 10px;
-      border-radius: 8px;
-      cursor: pointer;
-      border: none;
-    }
-    #score {
-      font-size: 20px;
-      margin-top: 10px;
-    }
-  </style>
+  <title>AI Rhythm Game (Beat Sync)</title>
+  <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
 </head>
 <body>
   <h1>AI Rhythm Game (Beat-Synced)</h1>
 
   <div id="controls">
-    <input type="file" id="file" accept="audio/*" />
-    <button id="transcribeBtn" disabled>Generate AI Rhythm</button>
+    <input type="file" id="audioUpload" accept="audio/*" />
+    <button id="generateBtn" disabled>Generate AI Rhythm</button>
   </div>
 
-  <div id="score">Score: 0 | Combo: 0</div>
-
-  <canvas id="gameCanvas" width="600" height="400"></canvas>
+  <canvas id="gameCanvas" width="400" height="500"></canvas>
 
   <script src="script.js"></script>
 </body>
