@@ -1,48 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Rhythm Game Classic Rectangle Style</title>
-<style>
-body {
-  background:#111;
-  color:#fff;
-  font-family:sans-serif;
-  text-align:center;
-}
-canvas {
-  background:#222;
-  border-radius:12px;
-  display:block;
-  margin:20px auto;
-}
-#file, #transcribeBtn {
-  margin-top:10px;
-  padding:8px 14px;
-  border-radius:6px;
-  border:none;
-  font-size:16px;
-}
-#transcribeBtn { background:#2ecc71; color:#031; font-weight:600; cursor:pointer; }
-#transcribeBtn:disabled { background:#444; color:#999; cursor:not-allowed; }
-#status { margin-top:10px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Rhythm Game</title>
+  <style>
+    body {
+      text-align: center;
+      background: #111;
+      color: white;
+      font-family: sans-serif;
+    }
+    canvas {
+      background: #222;
+      border-radius: 12px;
+      margin-top: 20px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #score {
+      font-size: 20px;
+      margin-top: 10px;
+    }
+    button, input {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+    }
+  </style>
 </head>
 <body>
+  <h1>AI Rhythm Game 🎵</h1>
+  <input type="file" id="file" accept="audio/*">
+  <button id="transcribeBtn" disabled>Transcribe & Play</button>
+  <div id="status">Load a song first.</div>
+  <div id="score">Score: 0</div>
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
 
-<h1>AI Rhythm Game Classic Rectangle Style</h1>
-<input type="file" id="file" accept="audio/*">
-<button id="transcribeBtn" disabled>Transcribe & Play</button>
-<p id="status">Choose a file to start.</p>
-
-<canvas id="gameCanvas" width="640" height="360"></canvas>
-
-<script>
+  <script>
 const fileEl = document.getElementById('file');
 const btn = document.getElementById('transcribeBtn');
 const status = document.getElementById('status');
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -50,6 +55,7 @@ const laneKeys = ['a','s','k','l'];
 const lanes = laneKeys.length;
 const laneW = canvas.width / lanes;
 let notes = [];
+let effects = [];
 let score = 0;
 let audioBuffer = null;
 
@@ -172,13 +178,15 @@ function playBufferWithNotes(buffer, seq) {
   requestAnimationFrame(visualLoop);
 }
 
-function spawnVisualNote(note) { notes.push(note); }
+function spawnVisualNote(note) {
+  notes.push(note);
+}
 
 // ---------- Visuals ----------
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Lanes
+  // Draw lanes
   for (let i=0;i<lanes;i++){
     ctx.fillStyle = '#111';
     ctx.fillRect(i*laneW,0,laneW,canvas.height);
@@ -190,7 +198,7 @@ function draw() {
     ctx.fillText(laneKeys[i].toUpperCase(), i*laneW + laneW/2 - 5, canvas.height - 10);
   }
 
-  // Hit line
+  // Draw hit line
   const hitY = canvas.height - 60;
   ctx.fillStyle = 'yellow';
   ctx.fillRect(0, hitY, canvas.width, 4);
@@ -202,7 +210,17 @@ function draw() {
     n.y += n.speed;
   });
 
-  // Score
+  // Draw effects (hit/miss)
+  effects.forEach(e=>{
+    ctx.fillStyle = e.type==='hit' ? '#fff' : '#f00';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, 10, 0, Math.PI*2);
+    ctx.fill();
+    e.life--;
+  });
+  effects = effects.filter(e => e.life>0);
+
+  // Draw score
   ctx.fillStyle = '#fff';
   ctx.font = '20px sans-serif';
   ctx.fillText('Score: ' + score, 10, 25);
@@ -213,8 +231,16 @@ let lastTime = 0;
 function visualLoop(ts) {
   lastTime = lastTime || ts;
 
-  // Remove offscreen notes
-  notes = notes.filter(n => n.y < canvas.height);
+  // Remove offscreen notes and register misses
+  const hitY = canvas.height - 60;
+  notes = notes.filter(n => {
+    if (n.y > canvas.height - 20) {
+      effects.push({ x: n.lane*laneW + laneW/2, y: hitY, type:'miss', life:20 });
+      score = Math.max(0, score-1);
+      return false;
+    }
+    return true;
+  });
 
   requestAnimationFrame(visualLoop);
   draw();
@@ -226,11 +252,12 @@ window.addEventListener('keydown', e => {
   const lane = laneKeys.indexOf(key);
   if (lane === -1) return;
 
+  const hitY = canvas.height - 60;
   for (let i=0;i<notes.length;i++) {
     const n = notes[i];
-    const hitY = canvas.height - 60;
     if (n.lane === lane && n.y > hitY - 20 && n.y < hitY + 20) {
       notes.splice(i,1);
+      effects.push({ x: n.lane*laneW + laneW/2, y: hitY, type:'hit', life:10 });
       score += 1;
       break;
     }
@@ -242,6 +269,6 @@ function applyHann(frame) { const out = new Float32Array(frame.length); for (let
 function fftMag(frame){ const N=512; const mags=new Float32Array(N); for(let k=0;k<N;k++){let re=0,im=0; for(let n=0;n<frame.length;n+=4){ const v=frame[n]; re+=v*Math.cos(-2*Math.PI*k*n/frame.length); im+=v*Math.sin(-2*Math.PI*k*n/frame.length);} mags[k]=Math.sqrt(re*re+im*im);} return mags; }
 function detectPitchAutocorr(buffer,sr){const x=new Float32Array(buffer.length); let rms=0; for(let i=0;i<buffer.length;i++){x[i]=buffer[i];rms+=x[i]*x[i];} rms=Math.sqrt(rms/buffer.length); if(rms<0.002) return null; const maxLag=Math.floor(sr/80); const minLag=Math.floor(sr/1000); let bestLag=-1,bestCorr=0; for(let lag=minLag;lag<=maxLag;lag++){let corr=0; for(let i=0;i+lag<buffer.length;i++) corr+=x[i]*x[i+lag]; if(corr>bestCorr){bestCorr=corr;bestLag=lag;}} if(bestLag<=0)return null; return sr/bestLag;}
 function freqToMidi(freq){return Math.round(69+12*Math.log2(freq/440));}
-</script>
+  </script>
 </body>
 </html>
