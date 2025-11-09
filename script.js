@@ -5,12 +5,12 @@ const status = document.getElementById('status');
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const laneKeys = ['a','s','k','l']; // 4 lanes
+const laneKeys = ['a','s','k','l'];
 const lanes = laneKeys.length;
 const laneW = canvas.width / lanes;
 let notes = [];
+let effects = [];
 let score = 0;
-
 let audioBuffer = null;
 
 // ---------- Load Audio ----------
@@ -29,8 +29,8 @@ btn.addEventListener('click', async () => {
   status.textContent = 'Transcribing (approx)...';
   let seq = await transcribeBufferApprox(audioBuffer);
 
-  // Reduce note density by merging close notes
-  const minGap = 0.15; // seconds
+  // Reduce note density
+  const minGap = 0.15;
   seq.sort((a,b)=>a.startTime-b.startTime);
   const filtered = [];
   for (let n of seq) {
@@ -62,7 +62,7 @@ async function readFileToAudioBuffer(file) {
 // ---------- Transcription ----------
 async function transcribeBufferApprox(buffer) {
   const sampleRate = buffer.sampleRate;
-  const channelData = buffer.getChannelData(0); // mono
+  const channelData = buffer.getChannelData(0);
   const frameSize = 2048;
   const hopSize = 512;
   const frames = [];
@@ -104,12 +104,10 @@ async function transcribeBufferApprox(buffer) {
     const f0 = detectPitchAutocorr(slice, sampleRate);
     if (f0 && f0 > 80 && f0 < 2000) {
       const midi = freqToMidi(f0);
-      // Map to 4 lanes
       const lane = Math.floor(((Math.max(40, Math.min(88, midi)) - 40) / (88 - 40)) * lanes);
       notesArr.push({ startTime: t, lane, y: -20, speed: 3 });
     }
   }
-
   return notesArr;
 }
 
@@ -142,44 +140,76 @@ function spawnVisualNote(note) {
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Draw lanes
+  // Lanes
   for (let i=0;i<lanes;i++){
     ctx.fillStyle = '#111';
-    ctx.fillRect(i*laneW,0,laneW-2,canvas.height);
-
+    ctx.fillRect(i*laneW,0,laneW,canvas.height);
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(i*laneW,0,laneW,canvas.height);
     ctx.fillStyle = '#eee';
     ctx.font = '16px sans-serif';
     ctx.fillText(laneKeys[i].toUpperCase(), i*laneW + laneW/2 - 5, canvas.height - 10);
   }
 
-  // Draw hit line
+  // Hit line
   const hitY = canvas.height - 60;
   ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(0, hitY);
   ctx.lineTo(canvas.width, hitY);
   ctx.stroke();
 
-  // Draw notes
+  // Draw notes as arrows
   notes.forEach(n=>{
+    const x = n.lane*laneW + laneW/2;
+    const y = n.y;
     ctx.fillStyle = ['#e74c3c','#f1c40f','#2ecc71','#3498db'][n.lane];
-    ctx.fillRect(n.lane*laneW + 6, n.y, laneW-12, 16);
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - laneW/3, y + 16);
+    ctx.lineTo(x + laneW/3, y + 16);
+    ctx.closePath();
+    ctx.fill();
+
     n.y += n.speed;
   });
 
-  // Draw score
+  // Draw effects
+  effects.forEach(e=>{
+    ctx.fillStyle = e.type==='hit' ? '#fff' : '#f00';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, 10, 0, Math.PI*2);
+    ctx.fill();
+    e.life--;
+  });
+  effects = effects.filter(e => e.life>0);
+
+  // Score
   ctx.fillStyle = '#fff';
   ctx.font = '20px sans-serif';
   ctx.fillText('Score: ' + score, 10, 25);
 }
 
+// ---------- Main loop ----------
 let lastTime = 0;
 function visualLoop(ts) {
   lastTime = lastTime || ts;
-  notes = notes.filter(n => n.y < canvas.height + 50);
-  draw();
+
+  // Remove offscreen notes and register misses
+  notes = notes.filter(n => {
+    if (n.y > canvas.height - 40) {
+      effects.push({ x: n.lane*laneW + laneW/2, y: canvas.height - 60, type:'miss', life:20 });
+      score = Math.max(0, score-1);
+      return false;
+    }
+    return true;
+  });
+
   requestAnimationFrame(visualLoop);
+  draw();
 }
 
 // ---------- Input ----------
@@ -192,6 +222,7 @@ window.addEventListener('keydown', e => {
     const n = notes[i];
     if (n.lane === lane && n.y > canvas.height - 80 && n.y < canvas.height - 40) {
       notes.splice(i,1);
+      effects.push({ x: n.lane*laneW + laneW/2, y: canvas.height - 60, type:'hit', life:10 });
       score += 1;
       break;
     }
@@ -199,46 +230,7 @@ window.addEventListener('keydown', e => {
 });
 
 // ---------- DSP helpers ----------
-function applyHann(frame) {
-  const out = new Float32Array(frame.length);
-  for (let i=0;i<frame.length;i++) out[i] = frame[i]*0.5*(1 - Math.cos(2*Math.PI*i/(frame.length-1)));
-  return out;
-}
-
-function fftMag(frame) {
-  const N = 512;
-  const mags = new Float32Array(N);
-  for (let k = 0;k<N;k++){
-    let re=0, im=0;
-    for(let n=0;n<frame.length;n+=4){
-      const v=frame[n];
-      re += v*Math.cos(-2*Math.PI*k*n/frame.length);
-      im += v*Math.sin(-2*Math.PI*k*n/frame.length);
-    }
-    mags[k] = Math.sqrt(re*re + im*im);
-  }
-  return mags;
-}
-
-function detectPitchAutocorr(buffer, sampleRate) {
-  const x = new Float32Array(buffer.length);
-  let rms=0;
-  for(let i=0;i<buffer.length;i++){x[i]=buffer[i]; rms+=x[i]*x[i];}
-  rms=Math.sqrt(rms/buffer.length);
-  if(rms<0.002) return null;
-
-  const maxLag=Math.floor(sampleRate/80);
-  const minLag=Math.floor(sampleRate/1000);
-  let bestLag=-1,bestCorr=0;
-  for(let lag=minLag;lag<=maxLag;lag++){
-    let corr=0;
-    for(let i=0;i+lag<buffer.length;i++) corr+=x[i]*x[i+lag];
-    if(corr>bestCorr){bestCorr=corr; bestLag=lag;}
-  }
-  if(bestLag<=0) return null;
-  return sampleRate/bestLag;
-}
-
-function freqToMidi(freq){
-  return Math.round(69+12*Math.log2(freq/440));
-}
+function applyHann(frame) { const out = new Float32Array(frame.length); for (let i=0;i<frame.length;i++) out[i]=frame[i]*0.5*(1-Math.cos(2*Math.PI*i/(frame.length-1))); return out; }
+function fftMag(frame){ const N=512; const mags=new Float32Array(N); for(let k=0;k<N;k++){let re=0,im=0; for(let n=0;n<frame.length;n+=4){ const v=frame[n]; re+=v*Math.cos(-2*Math.PI*k*n/frame.length); im+=v*Math.sin(-2*Math.PI*k*n/frame.length);} mags[k]=Math.sqrt(re*re+im*im);} return mags; }
+function detectPitchAutocorr(buffer,sr){const x=new Float32Array(buffer.length); let rms=0; for(let i=0;i<buffer.length;i++){x[i]=buffer[i];rms+=x[i]*x[i];} rms=Math.sqrt(rms/buffer.length); if(rms<0.002) return null; const maxLag=Math.floor(sr/80); const minLag=Math.floor(sr/1000); let bestLag=-1,bestCorr=0; for(let lag=minLag;lag<=maxLag;lag++){let corr=0; for(let i=0;i+lag<buffer.length;i++) corr+=x[i]*x[i+lag]; if(corr>bestCorr){bestCorr=corr;bestLag=lag;}} if(bestLag<=0)return null; return sr/bestLag;}
+function freqToMidi(freq){return Math.round(69+12*Math.log2(freq/440));}
