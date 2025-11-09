@@ -1,3 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Rhythm Game Classic Rectangle Style</title>
+<style>
+body {
+  background:#111;
+  color:#fff;
+  font-family:sans-serif;
+  text-align:center;
+}
+canvas {
+  background:#222;
+  border-radius:12px;
+  display:block;
+  margin:20px auto;
+}
+#file, #transcribeBtn {
+  margin-top:10px;
+  padding:8px 14px;
+  border-radius:6px;
+  border:none;
+  font-size:16px;
+}
+#transcribeBtn { background:#2ecc71; color:#031; font-weight:600; cursor:pointer; }
+#transcribeBtn:disabled { background:#444; color:#999; cursor:not-allowed; }
+#status { margin-top:10px; }
+</style>
+</head>
+<body>
+
+<h1>AI Rhythm Game Classic Rectangle Style</h1>
+<input type="file" id="file" accept="audio/*">
+<button id="transcribeBtn" disabled>Transcribe & Play</button>
+<p id="status">Choose a file to start.</p>
+
+<canvas id="gameCanvas" width="640" height="360"></canvas>
+
+<script>
 const fileEl = document.getElementById('file');
 const btn = document.getElementById('transcribeBtn');
 const status = document.getElementById('status');
@@ -9,7 +50,6 @@ const laneKeys = ['a','s','k','l'];
 const lanes = laneKeys.length;
 const laneW = canvas.width / lanes;
 let notes = [];
-let effects = [];
 let score = 0;
 let audioBuffer = null;
 
@@ -113,11 +153,11 @@ async function transcribeBufferApprox(buffer) {
 
 // ---------- Playback ----------
 function playBufferWithNotes(buffer, seq) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const src = ctx.createBufferSource();
+  const ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctxAudio.createBufferSource();
   src.buffer = buffer;
-  src.connect(ctx.destination);
-  const startAt = ctx.currentTime + 0.5;
+  src.connect(ctxAudio.destination);
+  const startAt = ctxAudio.currentTime + 0.5;
   src.start(startAt);
 
   notes = [];
@@ -125,16 +165,14 @@ function playBufferWithNotes(buffer, seq) {
 
   seq.forEach(n => {
     const when = startAt + n.startTime;
-    setTimeout(() => spawnVisualNote(n), Math.max(0, (when - ctx.currentTime - 0.5) * 1000));
+    setTimeout(() => spawnVisualNote(n), Math.max(0, (when - ctxAudio.currentTime - 0.5) * 1000));
   });
 
   lastTime = performance.now();
   requestAnimationFrame(visualLoop);
 }
 
-function spawnVisualNote(note) {
-  notes.push(note);
-}
+function spawnVisualNote(note) { notes.push(note); }
 
 // ---------- Visuals ----------
 function draw() {
@@ -154,38 +192,15 @@ function draw() {
 
   // Hit line
   const hitY = canvas.height - 60;
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(0, hitY);
-  ctx.lineTo(canvas.width, hitY);
-  ctx.stroke();
+  ctx.fillStyle = 'yellow';
+  ctx.fillRect(0, hitY, canvas.width, 4);
 
-  // Draw notes as arrows
+  // Draw notes as rectangles
   notes.forEach(n=>{
-    const x = n.lane*laneW + laneW/2;
-    const y = n.y;
     ctx.fillStyle = ['#e74c3c','#f1c40f','#2ecc71','#3498db'][n.lane];
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x - laneW/3, y + 16);
-    ctx.lineTo(x + laneW/3, y + 16);
-    ctx.closePath();
-    ctx.fill();
-
+    ctx.fillRect(n.lane*laneW + 5, n.y, laneW - 10, 20);
     n.y += n.speed;
   });
-
-  // Draw effects
-  effects.forEach(e=>{
-    ctx.fillStyle = e.type==='hit' ? '#fff' : '#f00';
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, 10, 0, Math.PI*2);
-    ctx.fill();
-    e.life--;
-  });
-  effects = effects.filter(e => e.life>0);
 
   // Score
   ctx.fillStyle = '#fff';
@@ -198,15 +213,8 @@ let lastTime = 0;
 function visualLoop(ts) {
   lastTime = lastTime || ts;
 
-  // Remove offscreen notes and register misses
-  notes = notes.filter(n => {
-    if (n.y > canvas.height - 40) {
-      effects.push({ x: n.lane*laneW + laneW/2, y: canvas.height - 60, type:'miss', life:20 });
-      score = Math.max(0, score-1);
-      return false;
-    }
-    return true;
-  });
+  // Remove offscreen notes
+  notes = notes.filter(n => n.y < canvas.height);
 
   requestAnimationFrame(visualLoop);
   draw();
@@ -220,9 +228,9 @@ window.addEventListener('keydown', e => {
 
   for (let i=0;i<notes.length;i++) {
     const n = notes[i];
-    if (n.lane === lane && n.y > canvas.height - 80 && n.y < canvas.height - 40) {
+    const hitY = canvas.height - 60;
+    if (n.lane === lane && n.y > hitY - 20 && n.y < hitY + 20) {
       notes.splice(i,1);
-      effects.push({ x: n.lane*laneW + laneW/2, y: canvas.height - 60, type:'hit', life:10 });
       score += 1;
       break;
     }
@@ -234,3 +242,6 @@ function applyHann(frame) { const out = new Float32Array(frame.length); for (let
 function fftMag(frame){ const N=512; const mags=new Float32Array(N); for(let k=0;k<N;k++){let re=0,im=0; for(let n=0;n<frame.length;n+=4){ const v=frame[n]; re+=v*Math.cos(-2*Math.PI*k*n/frame.length); im+=v*Math.sin(-2*Math.PI*k*n/frame.length);} mags[k]=Math.sqrt(re*re+im*im);} return mags; }
 function detectPitchAutocorr(buffer,sr){const x=new Float32Array(buffer.length); let rms=0; for(let i=0;i<buffer.length;i++){x[i]=buffer[i];rms+=x[i]*x[i];} rms=Math.sqrt(rms/buffer.length); if(rms<0.002) return null; const maxLag=Math.floor(sr/80); const minLag=Math.floor(sr/1000); let bestLag=-1,bestCorr=0; for(let lag=minLag;lag<=maxLag;lag++){let corr=0; for(let i=0;i+lag<buffer.length;i++) corr+=x[i]*x[i+lag]; if(corr>bestCorr){bestCorr=corr;bestLag=lag;}} if(bestLag<=0)return null; return sr/bestLag;}
 function freqToMidi(freq){return Math.round(69+12*Math.log2(freq/440));}
+</script>
+</body>
+</html>
