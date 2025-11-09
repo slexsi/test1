@@ -1,22 +1,24 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const startBtn = document.getElementById("startBtn");
+const statusText = document.getElementById("statusText");
 
 const lanes = 4;
 const laneWidth = canvas.width / lanes;
 let notes = [];
-let lastTime = 0;
 
 const rnn = new mm.MusicRNN(
   "https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit_rnn"
 );
 
+// ✅ Initialize the Magenta RNN
 async function initModel() {
+  statusText.textContent = "Loading AI model... (this may take ~10s)";
   await rnn.initialize();
-  console.log("✅ Magenta model ready");
+  statusText.textContent = "✅ Model ready!";
 }
 
-// ---- Correct Quantized Seed ----
+// 🧠 Define a quantized rhythm seed
 const seed = {
   notes: [
     { pitch: 36, quantizedStartStep: 0, quantizedEndStep: 1 },
@@ -26,26 +28,27 @@ const seed = {
   totalQuantizedSteps: 4,
 };
 
-// ---- Generate Rhythm (quantized) ----
+// 🎵 Generate new rhythm sequence
 async function generateRhythm() {
+  statusText.textContent = "🤖 Generating AI rhythm...";
   const steps = 32;
   const temperature = 1.1;
   const result = await rnn.continueSequence(seed, steps, temperature);
+  statusText.textContent = "🎶 Rhythm ready!";
   console.log("AI notes:", result.notes);
   return result.notes;
 }
 
-
-// Convert Magenta notes → game notes
+// 🟩 Convert AI rhythm to falling notes
 function spawnFromAI(aiNotes) {
   notes = aiNotes.map(n => ({
     lane: n.pitch % lanes,
-    y: -n.startTime * 600, // higher startTime → later spawn
-    speed: 1.5,
+    y: -n.quantizedStartStep * 50,
+    speed: 2,
   }));
 }
 
-// Draw notes
+// 🎨 Draw the falling notes
 function drawNotes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   notes.forEach(n => {
@@ -56,11 +59,12 @@ function drawNotes() {
   requestAnimationFrame(drawNotes);
 }
 
-// Start button
+// ▶️ Start button event
 startBtn.onclick = async () => {
   startBtn.disabled = true;
   await initModel();
   const aiNotes = await generateRhythm();
   spawnFromAI(aiNotes);
   drawNotes();
+  statusText.textContent = "🎵 Playing AI rhythm sequence!";
 };
